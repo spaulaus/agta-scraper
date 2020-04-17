@@ -17,18 +17,20 @@ DATA_DIR = "data/html/"
 TEST_FILE = "data/html/jewelrytelevision.html"
 
 TEST_FILES = [
-    "data/html/jewelrytelevision.html",
-    "data/html/alanjamesjewelersllc.html",
-    "data/html/robertshapiro.html",
-    "data/html/monalisafinejewelsinc.html",
-    "data/html/neallitmancompany.html"
+    "jewelrytelevision.html",
+    "alanjamesjewelersllc.html",
+    "robertshapiro.html",
+    "monalisafinejewelsinc.html",
+    "neallitmancompany.html"
 ]
 
 CSV_HEADER = ['company', 'address1', 'city', 'state', 'zip', 'country', 'last_name', 'first_name',
               'email', 'phone', 'phone_extension', 'fax', 'url']
 
 ADDRESS1_LABELS = ["Avenue", "Lane", "Road", "Boulevard", "Drive", "Street", "Ave.", "Dr.", "Rd.",
-                   "Blvd.", "Ln.", "St.", "PO Box"]
+                   "Blvd.", "Ln.", "St.", "PO Box", 'Trail', 'Parkway', 'Pkwy.', "Sq.", "Square",
+                   "Ste.", "Frwy.", "Freeway", "Center", "Ct.", "Court", "Fl.", "Ave,", "St,",
+                   "Cir.", "Circle", "Blvd,"]
 
 URL_PATTERN = compile('http[s]?://[w]{0,3}[.]?\w+(.\w+){0,10}')
 PHONE_PATTERN = compile('((\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})')
@@ -73,7 +75,8 @@ else:
     FILE_LIST = listdir('data/html/')
 
 for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
-    print("Working on", file)
+    if DEBUG:
+        print("Working on", file)
     file_handle = open(file, 'r')
     SOUP = BeautifulSoup(file_handle, features='html.parser')
 
@@ -93,7 +96,7 @@ for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
                 last_name += name_parts[1]
                 first_name = name_parts[2]
             else:
-                first_name = [1]
+                first_name = name_parts[1]
 
             contact_info['last_name'] = last_name
             contact_info['first_name'] = first_name
@@ -108,10 +111,12 @@ for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
             contact_info['url'] = URL_PATTERN.search(line).group()
             break
 
+    if DEBUG:
+        print(contact_info)
     contacts.append(contact_info)
     file_handle.close()
 
-with open('data/results/basic_info.csv', 'w', newline='') as outfile:
+with open('data/results/poc_results.csv', 'w', newline='') as outfile:
     writer = DictWriter(outfile, fieldnames=CSV_HEADER)
     writer.writeheader()
     for row in contacts:
