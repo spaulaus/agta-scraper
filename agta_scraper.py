@@ -35,10 +35,10 @@ while NEXT_URL:
         print(f"Working on {link.contents[0]}")
         name = link.contents[0].translate(str.maketrans('', '', punctuation)) \
             .replace(' ', '').lower()
-        if isfile(f'results/{name}.html'):
+        if isfile(f'data/html/{name}.html'):
             print(f'{name} already exists! Skipping...')
             continue
-        output = open(f"results/{name}.html", 'wb')
+        output = open(f"data/html/{name}.html", 'wb')
         output.write(requests.get(BASE_URL + link['href']).text.encode('utf-8'))
         output.close()
         time.sleep(1)
