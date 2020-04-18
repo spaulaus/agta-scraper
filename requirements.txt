@@ -1,3 +1,5 @@
 requests
 beautifulsoup4
-pycountry
+git+https://github.com/mjadczak/usaddress-scourgify.git@improve-parsing
+pytest
+pylint

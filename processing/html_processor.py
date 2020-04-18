@@ -9,28 +9,24 @@ from os import listdir
 from re import compile
 
 from bs4 import BeautifulSoup
-from pycountry import countries
+from scourgify import normalize_address_record
+from scourgify.exceptions import UnParseableAddressError
 
 DEBUG = False
 
-DATA_DIR = "data/html/"
-TEST_FILE = "data/html/jewelrytelevision.html"
-
+DATA_DIR = "../data/html/"
 TEST_FILES = [
     "jewelrytelevision.html",
     "alanjamesjewelersllc.html",
     "robertshapiro.html",
     "monalisafinejewelsinc.html",
-    "neallitmancompany.html"
+    "neallitmancompany.html",
+    "dallasprincecompany.html"
 ]
 
-CSV_HEADER = ['company', 'address1', 'city', 'state', 'zip', 'country', 'last_name', 'first_name',
-              'email', 'phone', 'phone_extension', 'fax', 'url']
-
-ADDRESS1_LABELS = ["Avenue", "Lane", "Road", "Boulevard", "Drive", "Street", "Ave.", "Dr.", "Rd.",
-                   "Blvd.", "Ln.", "St.", "PO Box", 'Trail', 'Parkway', 'Pkwy.', "Sq.", "Square",
-                   "Ste.", "Frwy.", "Freeway", "Center", "Ct.", "Court", "Fl.", "Ave,", "St,",
-                   "Cir.", "Circle", "Blvd,"]
+CSV_HEADER = ['company', 'address_line_1', "address_line_2", 'city', 'state', 'postal_code',
+              'country', 'last_name', 'first_name', 'email', 'phone', 'phone_extension',
+              'fax', 'url']
 
 URL_PATTERN = compile('http[s]?://[w]{0,3}[.]?\w+(.\w+){0,10}')
 PHONE_PATTERN = compile('((\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})')
@@ -42,21 +38,26 @@ CONTACT_PATTERN = compile("Contact: ([a-zA-Z][0-9a-zA-Z .,'-]*)")
 
 
 def process_address_line(input_line, info):
-    for line in [line.replace("\xa0", ' ') for line in input_line.split("\n") if line]:
-        if any(label in line for label in ADDRESS1_LABELS):
-            info['address1'] = line.strip(", ")
+    try:
+        if input_line.find("United States of America") == -1:
+            raise ValueError("Cannot parse non-US addresses")
+        line = input_line.replace("\xa0", ' ').replace("\n", " ") \
+            .replace("United States of America", " ")
+        info.update(normalize_address_record(line))
+        info['country'] = "United States of America"
+    except UnParseableAddressError:
+        line = [line for line in input_line.replace("\xa0", ' ').split("\n") if line]
+        print(line)
+        if len(line) == 3:
+            info['address_line_1'] = line[0].strip(", ")
 
-        if ADDRESS_STATE_LINE_PATTERN.search(line):
-            city, state, zcode = ADDRESS_STATE_LINE_PATTERN.findall(line)[0]
-            info['city'] = city
-            info['state'] = state
-            info['zip'] = zcode
+            if ADDRESS_STATE_LINE_PATTERN.search(line[1]):
+                city, state, zcode = ADDRESS_STATE_LINE_PATTERN.findall(line[1])[0]
+                info['city'] = city
+                info['state'] = state
+                info['postal_code'] = zcode
 
-        try:
-            countries.search_fuzzy(line)
-            info['country'] = line
-        except LookupError:
-            pass
+            info['country'] = line[2]
 
 
 def process_phone_numbers(line, info):
@@ -72,12 +73,12 @@ contacts = list()
 if DEBUG:
     FILE_LIST = TEST_FILES
 else:
-    FILE_LIST = listdir('data/html/')
+    FILE_LIST = sorted(listdir(DATA_DIR))
 
 for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
     if DEBUG:
         print("Working on", file)
-    file_handle = open(file, 'r')
+    file_handle = open(file, 'r', encoding='utf-8')
     SOUP = BeautifulSoup(file_handle, features='html.parser')
 
     contact_info = {'company': SOUP.find('h1').text}
@@ -116,7 +117,7 @@ for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
     contacts.append(contact_info)
     file_handle.close()
 
-with open('data/results/poc_results.csv', 'w', newline='') as outfile:
+with open('../data/results/poc_results.csv', 'w', newline='') as outfile:
     writer = DictWriter(outfile, fieldnames=CSV_HEADER)
     writer.writeheader()
     for row in contacts:

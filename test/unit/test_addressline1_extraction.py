@@ -22,3 +22,6 @@ SAMPLE_LIST = [
     "900 N. Michigan Ave, L5-14,   ",
     "2044 San Marco Blvd,   "
 ]
+
+def test_street_extraction():
+    assert True
