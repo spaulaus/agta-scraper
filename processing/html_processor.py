@@ -9,8 +9,6 @@ from os import listdir
 from re import compile
 
 from bs4 import BeautifulSoup
-from scourgify import normalize_address_record
-from scourgify.exceptions import UnParseableAddressError
 
 DEBUG = False
 
@@ -21,12 +19,13 @@ TEST_FILES = [
     "robertshapiro.html",
     "monalisafinejewelsinc.html",
     "neallitmancompany.html",
-    "dallasprincecompany.html"
+    "dallasprincecompany.html",
+    "sheahanstephensapphires.html"
 ]
 
 CSV_HEADER = ['company', 'address_line_1', "address_line_2", 'city', 'state', 'postal_code',
               'country', 'last_name', 'first_name', 'email', 'phone', 'phone_extension',
-              'fax', 'url']
+              'fax', 'url', 'gemstones']
 
 URL_PATTERN = compile('http[s]?://[w]{0,3}[.]?\w+(.\w+){0,10}')
 PHONE_PATTERN = compile('((\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})')
@@ -38,26 +37,17 @@ CONTACT_PATTERN = compile("Contact: ([a-zA-Z][0-9a-zA-Z .,'-]*)")
 
 
 def process_address_line(input_line, info):
-    try:
-        if input_line.find("United States of America") == -1:
-            raise ValueError("Cannot parse non-US addresses")
-        line = input_line.replace("\xa0", ' ').replace("\n", " ") \
-            .replace("United States of America", " ")
-        info.update(normalize_address_record(line))
-        info['country'] = "United States of America"
-    except UnParseableAddressError:
-        line = [line for line in input_line.replace("\xa0", ' ').split("\n") if line]
-        print(line)
-        if len(line) == 3:
-            info['address_line_1'] = line[0].strip(", ")
+    line = [line for line in input_line.replace("\xa0", ' ').split("\n") if line]
+    if len(line) == 3:
+        info['address_line_1'] = line[0].strip(", ")
 
-            if ADDRESS_STATE_LINE_PATTERN.search(line[1]):
-                city, state, zcode = ADDRESS_STATE_LINE_PATTERN.findall(line[1])[0]
-                info['city'] = city
-                info['state'] = state
-                info['postal_code'] = zcode
+        if ADDRESS_STATE_LINE_PATTERN.search(line[1]):
+            city, state, zcode = ADDRESS_STATE_LINE_PATTERN.findall(line[1])[0]
+            info['city'] = city
+            info['state'] = state
+            info['postal_code'] = zcode
 
-            info['country'] = line[2]
+        info['country'] = line[2]
 
 
 def process_phone_numbers(line, info):
@@ -69,26 +59,14 @@ def process_phone_numbers(line, info):
         info['phone_extension'] = EXTENSION_PATTERN.findall(line)[0][1]
 
 
-contacts = list()
-if DEBUG:
-    FILE_LIST = TEST_FILES
-else:
-    FILE_LIST = sorted(listdir(DATA_DIR))
-
-for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
-    if DEBUG:
-        print("Working on", file)
-    file_handle = open(file, 'r', encoding='utf-8')
-    SOUP = BeautifulSoup(file_handle, features='html.parser')
-
-    contact_info = {'company': SOUP.find('h1').text}
-
-    for line in [tag.text for tag in SOUP.find_all('p') if tag.text]:
+def process_contact_info(raw_soup):
+    info = {}
+    for line in [tag.text for tag in raw_soup.find_all('p') if tag.text]:
         if line.find("Return to Search Page") != -1:
             continue
 
         if line.find('\xa0') != -1:
-            process_address_line(line, contact_info)
+            process_address_line(line, info)
 
         if line.find("Contact:") != -1:
             name_parts = CONTACT_PATTERN.findall(line)[0].split(",")
@@ -99,26 +77,83 @@ for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
             else:
                 first_name = name_parts[1]
 
-            contact_info['last_name'] = last_name
-            contact_info['first_name'] = first_name
+            info['last_name'] = last_name
+            info['first_name'] = first_name
 
         if EMAIL_PATTERN.search(line):
-            contact_info['email'] = EMAIL_PATTERN.search(line).group()
+            info['email'] = EMAIL_PATTERN.search(line).group()
 
         if PHONE_PATTERN.search(line):
-            process_phone_numbers(line, contact_info)
+            process_phone_numbers(line, info)
 
         if URL_PATTERN.search(line):
-            contact_info['url'] = URL_PATTERN.search(line).group()
+            info['url'] = URL_PATTERN.search(line).group()
             break
 
-    if DEBUG:
-        print(contact_info)
-    contacts.append(contact_info)
-    file_handle.close()
+    return info
 
-with open('../data/results/poc_results.csv', 'w', newline='') as outfile:
-    writer = DictWriter(outfile, fieldnames=CSV_HEADER)
-    writer.writeheader()
-    for row in contacts:
-        writer.writerow(row)
+
+def process_services(soup):
+    pass
+
+
+def process_gemstones(soup):
+    gems = list()
+    for row in soup.find_all('div', {'class': 'row'})[1:]:
+        for child in row.children:
+            if child.string == "Name:":
+                gems.append(child.find_next_sibling().string)
+    return gems
+
+
+def process_html():
+    profiles = list()
+
+    if DEBUG:
+        FILE_LIST = TEST_FILES
+    else:
+        FILE_LIST = sorted(listdir(DATA_DIR))
+
+    for file in [f'{DATA_DIR}{file}' for file in FILE_LIST]:
+        if DEBUG:
+            print("Working on", file)
+        file_handle = open(file, 'r', encoding='utf-8')
+        SOUP = BeautifulSoup(file_handle, features='html.parser')
+
+        profile = {'company': SOUP.find('h1').text}
+        profile.update(process_contact_info(SOUP))
+
+        if DEBUG:
+            print(profile)
+
+        services, gemstones = SOUP.find_all('h2')
+        if services:
+            process_services(SOUP)
+        if gemstones:
+            profile.update({'gemstones': process_gemstones(SOUP)})
+
+        profiles.append(profile)
+        file_handle.close()
+
+    if DEBUG:
+        ofile = '../data/results/poc_results_debug.csv'
+    else:
+        ofile = '../data/results/poc_results.csv'
+
+    with open(ofile, 'w', newline='') as outfile:
+        writer = DictWriter(outfile, fieldnames=CSV_HEADER)
+        writer.writeheader()
+        for profile in profiles:
+            writer.writerow(profile)
+
+    return len(profiles)
+
+
+if __name__ == '__main__':
+    num_records_processed = 0
+    try:
+        num_records_processed = process_html()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print(f"Finished processing {num_records_processed} records.")
